@@ -251,7 +251,7 @@ def test_run_continues_when_one_source_fails(config, monkeypatch):
 
     assert len(sent) == 1, "ChemRxiv results should still be emailed"
     _, _, email_body = sent[0]
-    assert "ChemRxiv paper" in email_body
+    assert "ChemRxiv paper" in __import__("email").message_from_string(email_body).get_payload(decode=True).decode("utf-8")
 
 
 def test_run_sends_two_channel_digest_and_records_sent_papers(config, monkeypatch, tmp_path):
@@ -291,8 +291,8 @@ def test_run_sends_two_channel_digest_and_records_sent_papers(config, monkeypatc
 
     assert len(sent) == 1
     _, _, email_body = sent[0]
-    assert "Recent paper" in email_body
-    assert "Historical paper" in email_body
+    assert "Recent paper" in __import__("email").message_from_string(email_body).get_payload(decode=True).decode("utf-8")
+    assert "Historical paper" in __import__("email").message_from_string(email_body).get_payload(decode=True).decode("utf-8")
     assert (tmp_path / "sent_papers.json").exists()
 
 
