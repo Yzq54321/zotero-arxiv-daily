@@ -1,0 +1,9 @@
+# 已部署的研究偏好：非靶向 LC–MS 代谢组学
+# 在保留仓库私有 CUSTOM_CONFIG 中凭据与邮件设置的前提下，启用 PubMed 双通道推荐。
+executor:
+  max_paper_num: 10
+  recent_paper_num: 5
+  historical_paper_num: 5
+  sent_state_path: data/sent_papers.json
+  max_sent_records: 2000
+  source: ["biorxiv", "chemrxiv", "pubmed"]
