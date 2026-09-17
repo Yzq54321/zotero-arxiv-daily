@@ -9,6 +9,7 @@ from datetime import datetime
 from .reranker import get_reranker_cls
 from .construct_email import render_email
 from .utils import send_email
+from .recommendation_state import SentPaperStore, deduplicate_papers
 from openai import OpenAI
 from tqdm import tqdm
 
@@ -39,6 +40,8 @@ class Executor:
         }
         self.reranker = get_reranker_cls(config.executor.reranker)(config)
         self.openai_client = OpenAI(api_key=config.llm.api.key, base_url=config.llm.api.base_url)
+        state_path = getattr(config.executor, "sent_state_path", None)
+        self.sent_paper_store = SentPaperStore(state_path, int(config.executor.max_sent_records)) if state_path else None
     def fetch_zotero_corpus(self) -> list[CorpusPaper]:
         logger.info("Fetching zotero corpus")
         zot = zotero.Zotero(self.config.zotero.user_id, 'user', self.config.zotero.api_key)
@@ -112,11 +115,23 @@ class Executor:
             logger.info(f"Retrieved {len(papers)} {source} papers")
             all_papers.extend(papers)
         logger.info(f"Total {len(all_papers)} papers retrieved from all sources")
+        all_papers = deduplicate_papers(all_papers)
+        if self.sent_paper_store:
+            before_filter = len(all_papers)
+            all_papers = [paper for paper in all_papers if not self.sent_paper_store.has_seen(paper)]
+            logger.info(f"Skipped {before_filter - len(all_papers)} papers already sent in previous digests")
         reranked_papers = []
         if len(all_papers) > 0:
             logger.info("Reranking papers...")
             reranked_papers = self.reranker.rerank(all_papers, corpus)
-            reranked_papers = reranked_papers[:self.config.executor.max_paper_num]
+            recent_limit = getattr(self.config.executor, "recent_paper_num", None)
+            historical_limit = int(getattr(self.config.executor, "historical_paper_num", 0))
+            if recent_limit is None and historical_limit == 0:
+                reranked_papers = reranked_papers[:self.config.executor.max_paper_num]
+            else:
+                recent_papers = [p for p in reranked_papers if p.channel == "recent"][:int(recent_limit or 0)]
+                historical_papers = [p for p in reranked_papers if p.channel == "historical"][:historical_limit]
+                reranked_papers = recent_papers + historical_papers
             logger.info("Generating TLDR and affiliations...")
             for p in tqdm(reranked_papers):
                 p.generate_tldr(self.openai_client, self.config.llm)
@@ -127,4 +142,6 @@ class Executor:
         logger.info("Sending email...")
         email_content = render_email(reranked_papers)
         send_email(self.config, email_content)
+        if self.sent_paper_store:
+            self.sent_paper_store.record(reranked_papers)
         logger.info("Email sent successfully")

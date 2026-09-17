@@ -18,7 +18,7 @@
 
 ---
 
-<p align="center"> Recommend new arxiv papers of your interest daily according to your Zotero library.
+<p align="center"> Recommend new preprints and PubMed papers of your interest daily according to your Zotero library.
     <br> 
 </p>
 
@@ -29,7 +29,7 @@
 
 > Track new scientific researches of your interest by just forking (and staring) this repo!😊
 
-*Zotero-arXiv-Daily* finds arxiv papers that may attract you based on the context of your Zotero library, and then sends the result to your mailbox📮. It can be deployed as Github Action Workflow with **zero cost**, **no installation**, and **few configuration** of Github Action environment variables for daily **automatic** delivery.
+*Zotero-arXiv-Daily* finds preprints and PubMed papers that may attract you based on the context of your Zotero library, and then sends the result to your mailbox📮. It can be deployed as Github Action Workflow with **zero cost**, **no installation**, and **few configuration** of Github Action environment variables for daily **automatic** delivery.
 
 ## ✨ Features
 - Totally free! All the calculation can be done in the Github Action runner locally within its quota (for public repo).
@@ -45,6 +45,7 @@
   - biorxiv
   - medrxiv
   - chemrxiv
+  - PubMed, including a recent-publication channel and an optional historical backfill channel
 
 ## 📷 Screenshot
 ![screenshot](./assets/screenshot.png)
@@ -98,10 +99,19 @@ source:
   arxiv:
     category: ["cs.AI","cs.CV","cs.LG","cs.CL"]
     include_cross_list: false # Set to true to include arXiv cross-list papers in these categories.
+  pubmed:
+    query: >
+      ("Metabolomics"[MeSH Terms] OR metabolomic*[Title/Abstract]) AND ("Mass Spectrometry"[MeSH Terms] OR "LC-MS"[Title/Abstract])
+    recent_days: 7
+    historical_years: 5
+    candidate_limit: 100
 
 executor:
   debug: ${oc.env:DEBUG,null}
-  source: ['arxiv']
+  source: ['arxiv','pubmed']
+  recent_paper_num: 5
+  historical_paper_num: 5
+  sent_state_path: data/sent_papers.json
 ```
 Set `source.arxiv.include_cross_list: true` if you want cross-listed papers included.
 >[!NOTE]
@@ -124,6 +134,12 @@ source:
     category: null # The categories of target medrxiv papers. Find categories from [here](https://www.medrxiv.org/) Example: ["psychiatry and clinical psychology", "neurology"]
   chemrxiv:
     include_new_versions: false # Whether to include revised versions (v2, v3, ...) of previously posted chemrxiv preprints in addition to new first postings. chemrxiv has no category filter: all new preprints (a few dozen per day) are retrieved via Crossref and left to the reranker. Example: true
+  pubmed:
+    query: ??? # PubMed Boolean query. The default configuration provides a non-targeted LC–MS metabolomics query.
+    recent_days: 7 # Recent-publication window for the latest-developments channel.
+    historical_years: 5 # Historical search window, excluding the recent window.
+    candidate_limit: 100 # Candidates fetched per channel before reranking.
+    api_key: null # Optional NCBI E-utilities API key.
 
 email:
   sender: ??? # The email account of the SMTP server that sends you email. Example: abc@qq.com
@@ -160,8 +176,12 @@ executor:
   debug: false # Whether to use debug mode. Example: true
   send_empty: false # Whether to send an empty email even if no new papers today. Example: true
   max_paper_num: 100 # The maximum number of the papers presented in the email. Example: 100
-  source: ??? # The sources of papers to retrieve. Example: ['arxiv','biorxiv','medrxiv','chemrxiv']
+  source: ??? # The sources of papers to retrieve. Example: ['biorxiv','chemrxiv','pubmed']
   reranker: local # The reranker to use. Example: 'local' or 'api'
+  recent_paper_num: null # Set to 5 for the latest-developments channel.
+  historical_paper_num: 0 # Set to 5 for a five-paper historical PubMed backfill channel.
+  sent_state_path: null # Set to data/sent_papers.json to avoid re-sending papers across daily runs.
+  max_sent_records: 2000 # Maximum persisted sent-paper records.
 ```
 
 That's all! Now you can test the workflow by manually triggering it:

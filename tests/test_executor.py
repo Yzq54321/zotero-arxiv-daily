@@ -253,6 +253,47 @@ def test_run_continues_when_one_source_fails(config, monkeypatch):
     assert "ChemRxiv paper" in email_body
 
 
+def test_run_sends_two_channel_digest_and_records_sent_papers(config, monkeypatch, tmp_path):
+    """Recent and historical selections are both emailed and only then persisted."""
+    import smtplib
+
+    from omegaconf import open_dict
+
+    from tests.canned_responses import make_sample_paper, make_stub_openai_client, make_stub_smtp, make_stub_zotero_client
+    from zotero_arxiv_daily.retriever.base import registered_retrievers
+
+    with open_dict(config):
+        config.executor.source = ["biorxiv", "pubmed"]
+        config.executor.reranker = "api"
+        config.executor.send_empty = False
+        config.executor.recent_paper_num = 1
+        config.executor.historical_paper_num = 1
+        config.executor.sent_state_path = str(tmp_path / "sent_papers.json")
+        config.executor.max_sent_records = 10
+
+    stub_zot = make_stub_zotero_client()
+    monkeypatch.setattr("zotero_arxiv_daily.executor.zotero.Zotero", lambda *a, **kw: stub_zot)
+    stub_client = make_stub_openai_client()
+    monkeypatch.setattr("zotero_arxiv_daily.executor.OpenAI", lambda **kw: stub_client)
+    monkeypatch.setattr("zotero_arxiv_daily.reranker.api.OpenAI", lambda **kw: stub_client)
+
+    recent = make_sample_paper(title="Recent paper", score=None, doi="10.1000/recent", channel="recent")
+    historical = make_sample_paper(title="Historical paper", score=None, pmid="123456", channel="historical")
+    monkeypatch.setattr(registered_retrievers["biorxiv"], "retrieve_papers", lambda self: [recent])
+    monkeypatch.setattr(registered_retrievers["pubmed"], "retrieve_papers", lambda self: [historical])
+
+    sent = []
+    monkeypatch.setattr(smtplib, "SMTP", make_stub_smtp(sent))
+    executor = Executor(config)
+    executor.run()
+
+    assert len(sent) == 1
+    _, _, email_body = sent[0]
+    assert "Recent paper" in email_body
+    assert "Historical paper" in email_body
+    assert (tmp_path / "sent_papers.json").exists()
+
+
 def test_run_no_papers_send_empty_false(config, monkeypatch):
     """When no papers are found and send_empty=false, no email is sent."""
     import smtplib

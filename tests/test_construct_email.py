@@ -44,7 +44,7 @@ def test_render_email_affiliation_truncation():
 def test_render_email_no_affiliations():
     paper = make_sample_paper(affiliations=None, score=7.0, tldr="ok")
     html = render_email([paper])
-    assert "Unknown Affiliation" in html
+    assert "未知单位" in html
 
 
 def test_get_stars_low_score():
@@ -64,13 +64,22 @@ def test_get_stars_mid_score():
 
 
 def test_get_block_html_contains_all_fields():
-    html = get_block_html("Title", "Auth", "3.5", "Summary", "http://pdf.url", "MIT")
+    html = get_block_html("Title", "Auth", "3.5", "Summary", "http://pdf.url", "pubmed", "MIT")
     assert "Title" in html
     assert "Auth" in html
     assert "3.5" in html
     assert "Summary" in html
     assert "http://pdf.url" in html
     assert "MIT" in html
+
+
+def test_render_email_separates_recent_and_historical_papers():
+    recent = make_sample_paper(title="Recent", channel="recent", score=7.0, tldr="recent summary")
+    historical = make_sample_paper(title="Historical", channel="historical", score=7.0, tldr="historical summary")
+    html = render_email([recent, historical])
+    assert "最新进展" in html
+    assert "历史补库" in html
+    assert html.index("Recent") < html.index("Historical")
 
 
 def test_get_empty_html():
