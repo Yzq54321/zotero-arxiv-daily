@@ -209,6 +209,50 @@ def test_run_end_to_end(config, monkeypatch):
     assert "text/html" in email_body
 
 
+def test_run_continues_when_one_source_fails(config, monkeypatch):
+    """A failed source must not prevent papers from another source being emailed."""
+    import smtplib
+
+    from omegaconf import open_dict
+
+    from tests.canned_responses import (
+        make_sample_paper,
+        make_stub_openai_client,
+        make_stub_smtp,
+        make_stub_zotero_client,
+    )
+    from zotero_arxiv_daily.retriever.base import registered_retrievers
+
+    with open_dict(config):
+        config.executor.source = ["biorxiv", "chemrxiv"]
+        config.executor.reranker = "api"
+        config.executor.send_empty = False
+
+    stub_zot = make_stub_zotero_client()
+    monkeypatch.setattr("zotero_arxiv_daily.executor.zotero.Zotero", lambda *a, **kw: stub_zot)
+
+    stub_client = make_stub_openai_client()
+    monkeypatch.setattr("zotero_arxiv_daily.executor.OpenAI", lambda **kw: stub_client)
+    monkeypatch.setattr("zotero_arxiv_daily.reranker.api.OpenAI", lambda **kw: stub_client)
+
+    def fail_biorxiv(self):
+        raise RuntimeError("bioRxiv returned invalid JSON")
+
+    chemrxiv_papers = [make_sample_paper(title="ChemRxiv paper", score=None)]
+    monkeypatch.setattr(registered_retrievers["biorxiv"], "retrieve_papers", fail_biorxiv)
+    monkeypatch.setattr(registered_retrievers["chemrxiv"], "retrieve_papers", lambda self: chemrxiv_papers)
+
+    sent = []
+    monkeypatch.setattr(smtplib, "SMTP", make_stub_smtp(sent))
+
+    executor = Executor(config)
+    executor.run()
+
+    assert len(sent) == 1, "ChemRxiv results should still be emailed"
+    _, _, email_body = sent[0]
+    assert "ChemRxiv paper" in email_body
+
+
 def test_run_no_papers_send_empty_false(config, monkeypatch):
     """When no papers are found and send_empty=false, no email is sent."""
     import smtplib

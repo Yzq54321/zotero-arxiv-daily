@@ -99,7 +99,13 @@ class Executor:
         all_papers = []
         for source, retriever in self.retrievers.items():
             logger.info(f"Retrieving {source} papers...")
-            papers = retriever.retrieve_papers()
+            try:
+                papers = retriever.retrieve_papers()
+            except Exception:
+                logger.exception(
+                    f"Failed to retrieve {source} papers. Skipping this source and continuing with the remaining sources."
+                )
+                continue
             if len(papers) == 0:
                 logger.info(f"No {source} papers found")
                 continue
