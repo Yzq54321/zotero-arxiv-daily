@@ -225,6 +225,7 @@ def test_run_continues_when_one_source_fails(config, monkeypatch):
 
     with open_dict(config):
         config.executor.source = ["biorxiv", "chemrxiv"]
+        config.source.biorxiv.category = ["biochemistry"]
         config.executor.reranker = "api"
         config.executor.send_empty = False
 
@@ -264,6 +265,7 @@ def test_run_sends_two_channel_digest_and_records_sent_papers(config, monkeypatc
 
     with open_dict(config):
         config.executor.source = ["biorxiv", "pubmed"]
+        config.source.biorxiv.category = ["biochemistry"]
         config.executor.reranker = "api"
         config.executor.send_empty = False
         config.executor.recent_paper_num = 1
